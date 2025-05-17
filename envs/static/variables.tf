@@ -30,43 +30,41 @@ variable "tf_automation_schedules" {
   description = "테라폼 자동화 스케줄"
   default = {
     apply = [
-      # main 브랜치: 평일 오전 9시 30분 시작
+      # main 브랜치: 평일 오전 9시 00분 시작
       { branch = "main", schedule = "00 9 * * 1-5" },
 
-      # dev 브랜치: 일~목 오후 12시 30분 시작
+      # dev 브랜치: 일~목 오후 12시 00분 시작
       { branch = "dev", schedule = "00 12 * * 0-4" },
 
-      # dev 브랜치: 금요일 오전 8시 30분 시작
+      # dev 브랜치: 금요일 오전 8시 00분 시작
       { branch = "dev", schedule = "00 8 * * 5" },
 
-      # dev 브랜치: 토요일 오후 12시 30분 시작
+      # dev 브랜치: 토요일 오후 12시 00분 시작
       { branch = "dev", schedule = "00 12 * * 6" }
     ]
     destroy = [
-      # # main 브랜치: 평일(월~금) 오후 8시에 종료
-      # { branch = "main", schedule = "0 20 * * 1-5" },
+      # main 브랜치: 평일(월~금) 오후 8시에 종료
+      { branch = "main", schedule = "0 20 * * 1-5" },
 
-      # # dev 브랜치: 일~목 오후 11시에 종료
-      # { branch = "dev", schedule = "22 00 * * 0-4" },
+      # dev 브랜치: 일~금 오후 11시에 종료
+      { branch = "dev", schedule = "00 23 * * 0-5" },
 
-      # # dev 브랜치: 금요일 오후 11시에 종료
-      # { branch = "dev", schedule = "0 23 * * 5" },
-
-      # # dev 브랜치: 일요일 새벽 4시에 종료 (토 → 일로 넘어간 시점)
-      # { branch = "dev", schedule = "0 4 * * 0" }
+      # dev 브랜치: 일요일 새벽 4시에 종료 (토 → 일로 넘어간 시점)
+      { branch = "dev", schedule = "0 4 * * 0" }
     ]
   }
 }
 
 variable "envs_parameter" {
   type = map(object({
-    db_name     = string
-    db_instance = string
+    db_name      = string
+    db_instance  = string
+    cloudstorage = string
   }))
   description = "환경별 필요 파라미터"
   default = {
-    dev  = { db_name = "dolpin", db_instance = "db-dev-primary" }
-    prod = { db_name = "dolpin", db_instance = "db-prod-primary" }
+    dev  = { db_name = "dolpin", db_instance = "db-dev-primary", cloudstorage = "dolpin-image-dev" }
+    prod = { db_name = "dolpin", db_instance = "db-prod-primary", cloudstorage = "dolpin-image-prod" }
   }
 }
 

@@ -14,11 +14,12 @@ resource "google_cloud_scheduler_job" "tf_scheduler_jobs" {
   pubsub_target {
     topic_name = google_pubsub_topic.tf_scheduler_topic.id
     attributes = {
-      branch     = each.value.branch
-      action     = each.value.action
-      path       = each.value.branch == "main" ? "prod" : each.value.branch
-      dbinstance = var.envs_parameter[each.value.branch == "main" ? "prod" : each.value.branch].db_instance
-      dbname     = var.envs_parameter[each.value.branch == "main" ? "prod" : each.value.branch].db_name
+      branch       = each.value.branch
+      action       = each.value.action
+      path         = each.value.branch == "main" ? "prod" : each.value.branch
+      dbinstance   = var.envs_parameter[each.value.branch == "main" ? "prod" : each.value.branch].db_instance
+      dbname       = var.envs_parameter[each.value.branch == "main" ? "prod" : each.value.branch].db_name
+      cloudstorage = var.envs_parameter[each.value.branch == "main" ? "prod" : each.value.branch].cloudstorage
     }
   }
 }
@@ -40,8 +41,8 @@ resource "google_storage_bucket" "backup_bucket" {
     managed_by  = "terraform"
   }
 
-  versioning {
-    enabled = true
+  lifecycle {
+    prevent_destroy = true
   }
 }
 
@@ -54,11 +55,12 @@ resource "google_cloudbuild_trigger" "tf_build_trigger" {
     topic = google_pubsub_topic.tf_scheduler_topic.id
   }
   substitutions = {
-    _BRANCH     = "$(body.message.attributes.branch)"
-    _ACTION     = "$(body.message.attributes.action)"
-    _PATH       = "$(body.message.attributes.path)"
-    _DBINSTANCE = "$(body.message.attributes.dbinstance)"
-    _DBNAME     = "$(body.message.attributes.dbname)"
+    _BRANCH       = "$(body.message.attributes.branch)"
+    _ACTION       = "$(body.message.attributes.action)"
+    _PATH         = "$(body.message.attributes.path)"
+    _DBINSTANCE   = "$(body.message.attributes.dbinstance)"
+    _DBNAME       = "$(body.message.attributes.dbname)"
+    _CLOUDSTORAGE = "$(body.message.attributes.cloudstorage)"
   }
 
   service_account = google_service_account.build_sa.id
@@ -67,7 +69,7 @@ resource "google_cloudbuild_trigger" "tf_build_trigger" {
     options {
       logging = "CLOUD_LOGGING_ONLY"
     }
-
+    # 1) Git clone
     step {
       name       = "gcr.io/cloud-builders/git"
       entrypoint = "bash"
@@ -76,7 +78,7 @@ resource "google_cloudbuild_trigger" "tf_build_trigger" {
         "git clone --branch=$${_BRANCH} --single-branch ${var.repo_url} repo"
       ]
     }
-
+    # Secret 세팅
     step {
       name       = "gcr.io/google.com/cloudsdktool/cloud-sdk:slim"
       entrypoint = "bash"
@@ -92,7 +94,7 @@ resource "google_cloudbuild_trigger" "tf_build_trigger" {
         EOF
       ]
     }
-
+    # Terraform init
     step {
       name       = "hashicorp/terraform:1.11.4"
       entrypoint = "sh"
@@ -101,52 +103,75 @@ resource "google_cloudbuild_trigger" "tf_build_trigger" {
         "cd repo/envs/$${_PATH} && terraform init"
       ]
     }
+    # Backup on destroy
     step {
       name       = "google/cloud-sdk:slim"
       entrypoint = "bash"
-      args = [
-        "-c",
+      args = ["-c",
         <<-EOF
+        set -e
         if [ "$${_ACTION}" = "destroy" ]; then
+          TS=$$(date +%Y%m%d_%H%M%S)
+
+          # DB Export
           gcloud sql export sql $${_DBINSTANCE} \
-            gs://${google_storage_bucket.backup_bucket.name}/$${_PATH}/db/db_backup_$(date +%Y%m%d_%H%M%S).sql \
-            --database=$${_DBNAME}
+            "gs://${google_storage_bucket.backup_bucket.name}/$${_PATH}/db/db_backup_$$TS.sql" \
+            --database=$${_DBNAME} --quiet
+
+          # Storage backup
+          gsutil -m rsync -r \
+            "gs://$${_CLOUDSTORAGE}" \
+            "gs://${google_storage_bucket.backup_bucket.name}/$${_PATH}/storage/storage_backup_$$TS/"
         fi
-      EOF
+        EOF
       ]
     }
 
-      step {
-        name       = "hashicorp/terraform:1.11.4"
-        entrypoint = "sh"
-        args = [
-          "-c",
-          "cd repo/envs/$${_PATH} && terraform $${_ACTION} -auto-approve"
-        ]
-      }
-
-      timeout = "1200s"
+    # Terraform apply/destroy
+    step {
+      name       = "hashicorp/terraform:1.11.4"
+      entrypoint = "sh"
+      args = [
+        "-c",
+        <<-EOF
+        set -e
+        if [ "$${_ACTION}" = "destroy" ] || [ "$${_ACTION}" = "apply" ]; then
+          cd repo/envs/$${_PATH} && terraform $${_ACTION} -auto-approve
+        fi
+        EOF
+      ]
+    }
 
     step {
       name       = "google/cloud-sdk:slim"
       entrypoint = "bash"
-      args = [
-        "-c",
+      args = ["-c",
         <<-EOF
+        set -e
         if [ "$${_ACTION}" = "apply" ]; then
-          LATEST_URI=$(
-            gsutil ls gs://${google_storage_bucket.backup_bucket.name}/$${_PATH}/db/db_backup_*.sql \
-              | sort \
-              | tail -n1
+          # Latest DB dump
+          LATEST_DB_URI=$$( \
+            gsutil ls "gs://${google_storage_bucket.backup_bucket.name}/$${_PATH}/db/db_backup_*.sql" \
+              | sort | tail -n1 \
           )
           gcloud sql import sql $${_DBINSTANCE} \
-            "$$LATEST_URI" \
-            --database=$${_DBNAME} \
-            --quiet
+            "$$LATEST_DB_URI" \
+            --database=$${_DBNAME} --quiet
+
+          # Latest storage backup
+          LATEST_STORAGE_PREFIX=$$( \
+            gsutil ls -d "gs://${google_storage_bucket.backup_bucket.name}/$${_PATH}/storage/*/" \
+              | sort | tail -n1 \
+          )
+            gsutil -m rsync -r \
+            "$$LATEST_STORAGE_PREFIX" \
+            "gs://$${_CLOUDSTORAGE}/"
         fi
-      EOF
+        EOF
       ]
     }
+
+    timeout = "1200s"
   }
 }
 

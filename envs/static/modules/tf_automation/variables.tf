@@ -21,6 +21,7 @@ variable "envs_parameter" {
   type = map(object({
     db_name     = string
     db_instance = string
+    cloudstorage = string
   }))
 
 }
