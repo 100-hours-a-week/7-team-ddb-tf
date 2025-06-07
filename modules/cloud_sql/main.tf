@@ -10,7 +10,12 @@ resource "google_sql_database_instance" "postgres" {
         name  = "nat 경로"
         value = var.nat_ip_address
       }
+      authorized_networks {
+        name  = "shared nat 경로"
+        value = var.shared_nat_ip_address
+      }
     }
+    
     user_labels = {
       name      = "${var.env}-${var.component}-${var.resource_type}"
       env       = var.env

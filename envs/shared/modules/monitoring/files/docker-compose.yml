@@ -105,6 +105,38 @@ services:
       - "9091:9091"
       - "10901:10901"
     restart: unless-stopped
+  cloudsql-proxy-dev:
+    image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.16.0
+    container_name: cloudsql-proxy-dev
+    command:
+      - "--address=0.0.0.0"
+      - "--port=5432"
+      - "velvety-calling-458402-c1:asia-northeast3:db-dev-primary"
+
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+  cloudsql-proxy-prod:
+    image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.16.0
+    container_name: cloudsql-proxy-prod
+    command:
+      - "--address=0.0.0.0"
+      - "--port=5433"
+      - "velvety-calling-458402-c1:asia-northeast3:db-prod-primary"
+    ports:
+      - "5433:5433"
+    restart: unless-stopped
+
+  postgres-exporter-dev:
+    image: quay.io/prometheuscommunity/postgres-exporter
+    container_name: postgres-exporter-dev
+    depends_on:
+      - cloudsql-proxy-dev
+    ports:
+      - "9187:9187"
+    environment:
+      - DATA_SOURCE_NAME=postgresql://dolpinuser:%23VfOvcSS60YH%29OU7@cloudsql-proxy-dev:5432/dolpin?sslmode=disable
+    restart: unless-stopped
 
 volumes:
   prometheus_data:

@@ -36,7 +36,7 @@ resource "google_compute_instance" "monitoring" {
   }
 
   metadata = {
-    ssh-keys       = join("\n", local.ssh_key_entries)
+    ssh-keys = join("\n", local.ssh_key_entries)
   }
 
   metadata_startup_script = local.rendered_startup_script
@@ -69,7 +69,7 @@ resource "google_compute_firewall" "jenkins_to_monitoring" {
     ports    = ["22"]
   }
 
-  source_ranges = ["35.235.240.0/20"]  
+  source_ranges = ["35.235.240.0/20"]
   target_tags   = [local.mon_tag]
 }
 
@@ -117,7 +117,8 @@ resource "google_project_iam_member" "monitoring_sa" {
     storage_admin        = "roles/storage.admin"
     compute_viewer       = "roles/compute.viewer"
     sotrage_object_admin = "roles/storage.objectAdmin"
-    iap_tunnel_accessor    = "roles/iap.tunnelResourceAccessor"
+    iap_tunnel_accessor  = "roles/iap.tunnelResourceAccessor"
+    cloudsql_client      = "roles/cloudsql.client"
   }
   project = var.project_id
   role    = each.value

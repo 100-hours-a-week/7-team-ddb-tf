@@ -9,3 +9,7 @@ output "subnet_cidrs" {
 output "debug_subnets" {
   value = module.network.subnets
 }
+
+output "nat_ip" {
+  value = module.nat_gateway.nat_ip
+}

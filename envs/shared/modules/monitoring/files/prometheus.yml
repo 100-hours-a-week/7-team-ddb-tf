@@ -38,3 +38,11 @@ scrape_configs:
       - action: replace
         source_labels: [__meta_gce_instance_name]
         target_label: nodename
+
+  - job_name: 'postgres-exporter-dev'
+    static_configs:
+      - targets: ['postgres-exporter-dev:9187']
+
+  - job_name: 'postgres-exporter-prod'
+    static_configs:
+      - targets: ['postgres-exporter-prod:9187']

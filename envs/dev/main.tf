@@ -95,6 +95,7 @@ module "cloudsql" {
   backup_bucket_name  = var.backup_bucket_name
   nat_ip_address      = module.nat_gateway.nat_ip
   project_id = var.project_id
+  shared_nat_ip_address = data.terraform_remote_state.shared.outputs.nat_ip
 }
 
 module "cloud_storage" {
